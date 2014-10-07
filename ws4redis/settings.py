@@ -46,3 +46,8 @@ Remember that this function is not allowed to perform any blocking requests, suc
 database!
 """
 WS4REDIS_ALLOWED_CHANNELS = getattr(settings, 'WS4REDIS_ALLOWED_CHANNELS', None)
+
+"""
+Replace the default authentication layer, based on sessions, by a custom one
+"""
+WS4REDIS_GET_USER  = getattr(settings, 'WS4REDIS_GET_USER', 'ws4redis.auth.get_user_from_session')

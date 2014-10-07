@@ -7,7 +7,6 @@ from django.core.exceptions import PermissionDenied
 from django import http
 from django.utils.encoding import force_str
 from django.utils.importlib import import_module
-from django.utils.functional import SimpleLazyObject
 from ws4redis import settings as private_settings
 from ws4redis.redis_store import RedisMessage
 from ws4redis.exceptions import WebSocketError, HandshakeError, UpgradeRequiredError
@@ -16,11 +15,16 @@ from ws4redis.exceptions import WebSocketError, HandshakeError, UpgradeRequiredE
 class WebsocketWSGIServer(object):
     def __init__(self, redis_connection=None):
         """
-        redis_connection can be overriden by a mock object.
+        redis_connection can be overridden by a mock object.
         """
         comps = str(private_settings.WS4REDIS_SUBSCRIBER).split('.')
         module = import_module('.'.join(comps[:-1]))
         Subscriber = getattr(module, comps[-1])
+
+        comps = str(private_settings.WS4REDIS_GET_USER).split('.')
+        module = import_module('.'.join(comps[:-1]))
+        self.get_user = getattr(module, comps[-1])
+
         self.possible_channels = Subscriber.subscription_channels + Subscriber.publish_channels
         self._redis_connection = redis_connection and redis_connection or StrictRedis(**private_settings.WS4REDIS_CONNECTION)
         self.Subscriber = Subscriber
@@ -36,16 +40,9 @@ class WebsocketWSGIServer(object):
             raise HandshakeError('Client does not wish to upgrade to a websocket')
 
     def process_request(self, request):
+        get_user = private_settings.WS4REDIS_GET_USER
         request.session = None
-        request.user = None
-        if 'django.contrib.sessions.middleware.SessionMiddleware' in settings.MIDDLEWARE_CLASSES:
-            engine = import_module(settings.SESSION_ENGINE)
-            session_key = request.COOKIES.get(settings.SESSION_COOKIE_NAME, None)
-            if session_key:
-                request.session = engine.SessionStore(session_key)
-                if 'django.contrib.auth.middleware.AuthenticationMiddleware' in settings.MIDDLEWARE_CLASSES:
-                    from django.contrib.auth import get_user
-                    request.user = SimpleLazyObject(lambda: get_user(request))
+        request.user = self.get_user(request)
 
     def process_subscriptions(self, request):
         agreed_channels = []
